@@ -2,6 +2,8 @@ import asyncio
 import ssl
 from urllib.parse import urlparse
 
+from loguru import logger
+
 
 class Request:
     pass
@@ -26,6 +28,7 @@ class Application:
         return _decorator
 
     def _get_ssl_ctx(self) -> ssl.SSLContext:
+        # Only allow TLS 1.3
         ssl_ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
         ssl_ctx.options |= (
             ssl.OP_NO_SSLv2
@@ -43,7 +46,7 @@ class Application:
         writer: asyncio.StreamWriter,
     ) -> None:
         data = await reader.read(1024)
-        print(data)
+        logger.info(data)
 
         # Ensure it's a valid request
         # 'gemini://localhost/\r\n'
@@ -53,7 +56,7 @@ class Application:
 
         message = data.decode()
         parsed_url = urlparse(message[:-2])
-        print(f"{parsed_url}")
+        logger.info(f"{parsed_url}")
 
         if parsed_url.scheme != "gemini":
             raise ValueError("Not a gemini URL")
@@ -66,17 +69,17 @@ class Application:
         writer.write(resp.content.encode())
         await writer.drain()
 
-        print("Close the connection")
+        logger.info("Close the connection")
         writer.close()
 
         return
 
-    async def run(self):
+    async def run(self, host: str = "localhost", port: int = 1965):
         server = await asyncio.start_server(
-            self._stream_handler, "127.0.0.1", 1965, ssl=self._get_ssl_ctx()
+            self._stream_handler, host, port, ssl=self._get_ssl_ctx()
         )
         addrs = ", ".join(str(sock.getsockname()) for sock in server.sockets)
-        print(f"Serving on {addrs}")
+        logger.info(f"Serving on {addrs}")
 
         async with server:
             await server.serve_forever()

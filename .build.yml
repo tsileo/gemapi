@@ -13,3 +13,4 @@ tasks:
     cd gemapi
     poetry install --no-interaction
     poetry run inv lint
+    poetry run inv tests
