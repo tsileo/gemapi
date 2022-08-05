@@ -11,6 +11,7 @@
  - Modern
    - as in it requires Python 3.10+
    - relies on type annotations (similar to FastAPI)
+   - built on top of `asyncio` streams
  - Handle certificate generation
    - TLS 1.3 only with Ed22519 public key algorithm
 
