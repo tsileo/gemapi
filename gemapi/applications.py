@@ -1,8 +1,56 @@
 import asyncio
+import re
 import ssl
+from dataclasses import dataclass
+from enum import Enum
 from urllib.parse import urlparse
 
 from loguru import logger
+
+_PARAM_REGEX = re.compile("{([a-zA-Z_][a-zA-Z0-9_]*)(:[a-zA-Z_][a-zA-Z0-9_]*)?}")
+
+
+class PathParamMatcher(Enum):
+    STR = "str"
+
+
+_PATH_PARAM_MATCHERS = {
+    PathParamMatcher.STR: "[^/]+",
+}
+
+
+@dataclass
+class PathParam:
+    name: str
+    matcher: PathParamMatcher
+
+
+def _build_path_regex(path: str) -> tuple[re.Pattern, list[PathParam]]:
+    # TODO: detect duplicate params and error on invalid matcher
+    path_params = []
+
+    replacements = []
+    for matched_param in _PARAM_REGEX.finditer(path):
+        matcher = PathParamMatcher.STR
+        group = matched_param.group()
+        parts = group.split(":")
+
+        match parts:
+            case [param_name]:
+                name = param_name[1:-1]
+            case [raw_name, raw_matcher]:
+                name = raw_name[1:]
+                matcher = PathParamMatcher(raw_matcher[:-1])
+            case _:
+                raise ValueError(f"Unexpected parts {parts}")
+
+        matcher_regex = _PATH_PARAM_MATCHERS[matcher]
+        replacements.append((group, f"(?P<{name}>{matcher_regex})"))
+        path_params.append(PathParam(name=name, matcher=matcher))
+
+    for group, replacement in replacements:
+        path = path.replace(group, replacement)
+    return re.compile(path + "$"), path_params
 
 
 class Request:
@@ -18,11 +66,14 @@ class RawResponse:
 
 class Application:
     def __init__(self) -> None:
-        self.routes = {}  # type: ignore
+        self._routes = []  # type: ignore
 
     def route(self, path: str):
         def _decorator(func):
-            self.routes[path] = func
+            # TODO: inspect.get_annotations to ensure path params are function
+            # parameters
+            path_regex, path_params = _build_path_regex(path)
+            self._routes.append((path_regex, path_params, func))
             return func
 
         return _decorator
@@ -62,7 +113,16 @@ class Application:
             raise ValueError("Not a gemini URL")
 
         req = Request()
-        resp = await self.routes["/"](req)
+        matched = False
+        for path_regex, _, path_handler in self._routes:
+            if m := path_regex.match(parsed_url.path):
+                logger.info(f"found route {path_handler.__name__}: match={m}")
+                # TODO: pass the path params as kwargs
+                resp = await path_handler(req)
+                matched = True
+
+        if matched is False:
+            raise ValueError("TODO not found")
 
         data = f"{resp.status_code} {resp.meta}\r\n".encode("utf-8")
         writer.write(data)
