@@ -1,4 +1,5 @@
 import asyncio
+import inspect
 import re
 import ssl
 from dataclasses import dataclass
@@ -58,7 +59,7 @@ class Request:
 
 
 class RawResponse:
-    def __init__(self, status_code: int, meta: str, content: str) -> None:
+    def __init__(self, status_code: int, meta: str, content: str | None) -> None:
         self.status_code = status_code
         self.meta = meta
         self.content = content
@@ -73,7 +74,13 @@ class Application:
             # TODO: inspect.get_annotations to ensure path params are function
             # parameters
             path_regex, path_params = _build_path_regex(path)
-            self._routes.append((path_regex, path_params, func))
+            func_sig = inspect.signature(func)
+            for path_param in path_params:
+                if path_param.name not in func_sig.parameters:
+                    raise ValueError(
+                        f"{func.__namee__} is missing a {path_param.name} " "parameter"
+                    )
+            self._routes.append((path_regex, path_params, func_sig, func))
             return func
 
         return _decorator
@@ -114,19 +121,22 @@ class Application:
 
         req = Request()
         matched = False
-        for path_regex, _, path_handler in self._routes:
+        for path_regex, _, handler_sig, path_handler in self._routes:
             if m := path_regex.match(parsed_url.path):
                 logger.info(f"found route {path_handler.__name__}: match={m}")
-                # TODO: pass the path params as kwargs
-                resp = await path_handler(req)
+                params = m.groupdict()
+                # TODO: pass the path params wit the right type as kwargs
+                resp = await path_handler(req, **params)
                 matched = True
 
         if matched is False:
-            raise ValueError("TODO not found")
+            resp = RawResponse(status_code=51, meta="Not found", content=None)
 
         data = f"{resp.status_code} {resp.meta}\r\n".encode("utf-8")
         writer.write(data)
-        writer.write(resp.content.encode())
+        if resp.content:
+            writer.write(resp.content.encode())
+
         await writer.drain()
 
         logger.info("Close the connection")

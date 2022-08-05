@@ -25,5 +25,14 @@ async def hello(req: Request) -> RawResponse:
     )
 
 
+@app.route("/hello/{name:str}")
+async def hello(req: Request, name: str) -> RawResponse:
+    return RawResponse(
+        status_code=20,
+        meta="text/gemini",
+        content=f"Hello {name}",
+    )
+
+
 asyncio.run(app.run())
 ```
