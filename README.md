@@ -4,7 +4,18 @@
 
 [Gemini](https://gemini.circumlunar.space/docs/specification.html) framework written in Python.
 
-Still in early development.
+**Still in early development.**
+
+## Features
+
+ - Modern
+   - as in it requires Python 3.10+
+   - relies on type annotations (similar to FastAPI)
+ - Handle certificate generation
+   - TLS 1.3 only with Ed22519 public key algorithm
+
+
+## Getting started
 
 ```python
 import asyncio
