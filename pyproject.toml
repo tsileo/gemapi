@@ -13,8 +13,12 @@ homepage = "https://git.sr.ht/~tsileo/gemapi"
 
 [tool.poetry.dependencies]
 python = "^3.10"
-pyOpenSSL = "^22.0.0"
 loguru = "^0.6.0"
+cryptography = "36.0.2"
+click = "^8.1.3"
+
+[tool.poetry.scripts]
+gemapi = 'gemapi.cli:main'
 
 [tool.poetry.dev-dependencies]
 isort = "^5.10.1"

@@ -48,3 +48,8 @@ def build_certificate(hostname: str) -> None:
 
     with open("cert.pem", "wb") as f:
         f.write(pub)
+
+
+def get_certificate_expiration(cert_as_pem: bytes) -> datetime.datetime:
+    cert = x509.load_pem_x509_certificate(cert_as_pem)
+    return cert.not_valid_after.replace(tzinfo=datetime.timezone.utc)

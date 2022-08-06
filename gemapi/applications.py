@@ -1,11 +1,13 @@
 import asyncio
 import inspect
 import re
+import signal
 import ssl
 from dataclasses import dataclass
 from enum import Enum
 from typing import Any
 from typing import Callable
+from urllib.parse import ParseResult
 from urllib.parse import urlparse
 
 from loguru import logger
@@ -67,7 +69,8 @@ def _build_path_regex(path: str) -> tuple[re.Pattern, list[PathParam]]:
 
 
 class Request:
-    pass
+    def __init__(self, parsed_url: ParseResult) -> None:
+        self.parsed_url = parsed_url
 
 
 class RawResponse:
@@ -147,6 +150,14 @@ class Application:
         data = await reader.read(1024)
         logger.info(data)
 
+        peername = writer.get_extra_info("peername")
+        logger.info(f"{peername=}")
+
+        ssl_obj = writer.get_extra_info("ssl_object")
+        logger.info(f"{ssl_obj=}")
+
+        logger.info(f"{ssl_obj.server_hostname=}")
+
         # Ensure it's a valid request
         # 'gemini://localhost/\r\n'
         # 1. ending with a <CR><LF>
@@ -160,7 +171,7 @@ class Application:
         if parsed_url.scheme != "gemini":
             raise ValueError("Not a gemini URL")
 
-        req = Request()
+        req = Request(parsed_url=parsed_url)
         matched = False
         for route in self._routes:
             if m := route.path_regex.match(parsed_url.path):
@@ -199,11 +210,48 @@ class Application:
         return
 
     async def run(self, host: str = "localhost", port: int = 1965):
-        server = await asyncio.start_server(
-            self._stream_handler, host, port, ssl=self._get_ssl_ctx()
-        )
-        addrs = ", ".join(str(sock.getsockname()) for sock in server.sockets)
-        logger.info(f"Serving on {addrs}")
+        loop = asyncio.get_event_loop()
+        signals = (signal.SIGHUP, signal.SIGTERM, signal.SIGINT)
+        for s in signals:
+            loop.add_signal_handler(
+                s, lambda s=s: asyncio.create_task(shutdown(s, loop))
+            )
+        while True:
+            server = await asyncio.start_server(
+                self._stream_handler, host, port, ssl=self._get_ssl_ctx()
+            )
+            addrs = ", ".join(str(sock.getsockname()) for sock in server.sockets)
+            logger.info(f"Serving on {addrs}")
+            stop = asyncio.Event()
 
-        async with server:
-            await server.serve_forever()
+            def restart_server():
+                # TODO:
+                stop.set()
+
+            timer = loop.call_later(3, restart_server)
+            # asyncio.create_task(restart_server())
+
+            try:
+                await stop.wait()
+            except asyncio.exceptions.CancelledError:
+                logger.info("stop cancelled")
+                break
+            server.close()
+            timer.cancel()
+        # async with server:
+        #    await server.serve_forever()
+        logger.info("Exiting")
+
+
+async def shutdown(signal, loop):
+    """Cleanup tasks tied to the service's shutdown."""
+    logger.info(f"{signal=}")
+    tasks = [t for t in asyncio.all_tasks() if t is not asyncio.current_task()]
+
+    logger.info(f"Cancelling {len(tasks)} tasks")
+
+    [task.cancel() for task in tasks]
+
+    await asyncio.gather(*tasks)
+    logger.info("stopping loop")
+    loop.stop()
