@@ -25,7 +25,8 @@ async def hello(req: Request, name: str) -> RawResponse:
 
 
 @app.route("/search")
-async def search(req: Request, q: Input) -> RawResponse:
+def search(req: Request, q: Input) -> RawResponse:
+    # Also support non coroutine functions
     return RawResponse(
         status_code=20,
         meta="text/gemini",

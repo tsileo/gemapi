@@ -13,7 +13,7 @@
    - relies on type annotations (similar to FastAPI)
    - built on top of `asyncio` streams
  - Handle certificate generation
-   - TLS 1.3 only with Ed22519 public key algorithm
+   - TLS 1.3 only with Ed25519 public key algorithm
 
 
 ## Getting started
@@ -48,7 +48,8 @@ async def hello(req: Request, name: str) -> RawResponse:
 
 
 @app.route("/search")
-async def search(req: Request, q: Input) -> RawResponse:
+def search(req: Request, q: Input) -> RawResponse:
+    # Also support non coroutine functions
     return RawResponse(
         status_code=20,
         meta="text/gemini",

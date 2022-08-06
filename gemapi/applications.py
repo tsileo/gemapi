@@ -4,6 +4,8 @@ import re
 import ssl
 from dataclasses import dataclass
 from enum import Enum
+from typing import Any
+from typing import Callable
 from urllib.parse import urlparse
 
 from loguru import logger
@@ -20,10 +22,20 @@ _PATH_PARAM_MATCHERS = {
 }
 
 
-@dataclass
+@dataclass(frozen=True)
 class PathParam:
     name: str
     matcher: PathParamMatcher
+
+
+@dataclass(frozen=True)
+class Route:
+    path_regex: re.Pattern
+    path_params: list[PathParam]
+    handler_signature: inspect.Signature
+    input_parameter: inspect.Parameter | None
+    handler: Callable[..., Any]
+    handler_is_coroutine: bool
 
 
 def _build_path_regex(path: str) -> tuple[re.Pattern, list[PathParam]]:
@@ -77,7 +89,7 @@ class Input:
 
 class Application:
     def __init__(self) -> None:
-        self._routes = []  # type: ignore
+        self._routes: list[Route] = []
 
     def route(self, path: str):
         def _decorator(func):
@@ -101,7 +113,14 @@ class Application:
                         )
 
             self._routes.append(
-                (path_regex, path_params, func_sig, maybe_input_param, func)
+                Route(
+                    path_regex=path_regex,
+                    path_params=path_params,
+                    handler_signature=func_sig,
+                    input_parameter=maybe_input_param,
+                    handler=func,
+                    handler_is_coroutine=inspect.iscoroutinefunction(func),
+                )
             )
             return func
 
@@ -143,23 +162,26 @@ class Application:
 
         req = Request()
         matched = False
-        for path_regex, _, handler_sig, input_param, path_handler in self._routes:
-            if m := path_regex.match(parsed_url.path):
+        for route in self._routes:
+            if m := route.path_regex.match(parsed_url.path):
                 matched = True
-                logger.info(f"found route {path_handler.__name__}: match={m}")
+                logger.info(f"found route {route.handler.__name__}: match={m}")
 
-                if input_param and not parsed_url.query:
+                if route.input_parameter and not parsed_url.query:
                     resp = RawResponse(
                         status_code=10,
-                        meta=input_param.name,
+                        meta=route.input_parameter.name,
                         content=None,
                     )
                 else:
                     params = m.groupdict()
-                    if input_param:
-                        params[input_param.name] = Input(parsed_url.query)
+                    if route.input_parameter:
+                        params[route.input_parameter.name] = Input(parsed_url.query)
                     # TODO: pass the path params wit the right type as kwargs
-                    resp = await path_handler(req, **params)
+                    if route.handler_is_coroutine:
+                        resp = await route.handler(req, **params)
+                    else:
+                        resp = route.handler(req, **params)
 
         if matched is False:
             resp = RawResponse(status_code=51, meta="Not found", content=None)
