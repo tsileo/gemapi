@@ -4,7 +4,8 @@
 
 [Gemini](https://gemini.circumlunar.space/docs/specification.html) framework written in Python.
 
-**Still in early development.**
+**Still in early development, there's no releases yet**
+
 
 ## Features
 
@@ -59,3 +60,19 @@ def search(req: Request, q: Input) -> RawResponse:
 
 asyncio.run(app.run())
 ```
+
+
+## Contributing
+
+All the development takes place on [sourcehut](https://git.sr.ht/~tsileo/gemapi), GitHub is only used as a mirror:
+
+ - [Project](https://sr.ht/~tsileo/gemapi/)
+ - [Issue tracker](https://todo.sr.ht/~tsileo/gemapi)
+ - [Mailing list](https://sr.ht/~tsileo/gemapi/lists)
+
+Contributions are welcomed.
+
+
+## License
+
+The project is licensed under the ISC LICENSE (see the LICENSE file).
