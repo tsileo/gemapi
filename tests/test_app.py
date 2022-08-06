@@ -20,3 +20,17 @@ def test_app__hello(test_application):
 
     assert response.status == "20"
     assert response.data() == "Hello thomas"
+
+
+def test_app__input(test_application):
+    response = ignition.request("//localhost/search")
+
+    assert response.status == "10"
+    assert response.data() == "q"
+
+
+def test_app__input_with_value(test_application):
+    response = ignition.request("//localhost/search?val")
+
+    assert response.status == "20"
+    assert response.data() == "val"

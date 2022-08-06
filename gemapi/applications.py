@@ -65,6 +65,16 @@ class RawResponse:
         self.content = content
 
 
+class Input:
+    def __init__(self, value: str | None = None) -> None:
+        self._value: str | None = value
+
+    def get_value(self) -> str:
+        if self._value is None:
+            raise ValueError("Uninitialized input")
+        return self._value
+
+
 class Application:
     def __init__(self) -> None:
         self._routes = []  # type: ignore
@@ -75,12 +85,24 @@ class Application:
             # parameters
             path_regex, path_params = _build_path_regex(path)
             func_sig = inspect.signature(func)
+            maybe_input_param: Input | None = None
             for path_param in path_params:
                 if path_param.name not in func_sig.parameters:
                     raise ValueError(
-                        f"{func.__namee__} is missing a {path_param.name} " "parameter"
+                        f"{func.__name__} is missing a {path_param.name} " "parameter"
                     )
-            self._routes.append((path_regex, path_params, func_sig, func))
+            for param in func_sig.parameters.values():
+                if param.annotation is Input:
+                    if maybe_input_param is None:
+                        maybe_input_param = param
+                    else:
+                        raise ValueError(
+                            f"{func.__name__}: Only 1 Input parameter is allowed"
+                        )
+
+            self._routes.append(
+                (path_regex, path_params, func_sig, maybe_input_param, func)
+            )
             return func
 
         return _decorator
@@ -121,13 +143,23 @@ class Application:
 
         req = Request()
         matched = False
-        for path_regex, _, handler_sig, path_handler in self._routes:
+        for path_regex, _, handler_sig, input_param, path_handler in self._routes:
             if m := path_regex.match(parsed_url.path):
-                logger.info(f"found route {path_handler.__name__}: match={m}")
-                params = m.groupdict()
-                # TODO: pass the path params wit the right type as kwargs
-                resp = await path_handler(req, **params)
                 matched = True
+                logger.info(f"found route {path_handler.__name__}: match={m}")
+
+                if input_param and not parsed_url.query:
+                    resp = RawResponse(
+                        status_code=10,
+                        meta=input_param.name,
+                        content=None,
+                    )
+                else:
+                    params = m.groupdict()
+                    if input_param:
+                        params[input_param.name] = Input(parsed_url.query)
+                    # TODO: pass the path params wit the right type as kwargs
+                    resp = await path_handler(req, **params)
 
         if matched is False:
             resp = RawResponse(status_code=51, meta="Not found", content=None)
