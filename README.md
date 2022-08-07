@@ -24,12 +24,13 @@
 import asyncio
 
 from gemapi.applications import Application
-from gemapi.request import Input
-from gemapi.request import Request
+from gemapi.applications import Input
+from gemapi.applications import Request
 from gemapi.responses import Response
-from gemapi.server import Server
 
 app = Application()
+
+example_dot_com_router = app.router_for_hostname("example.com")
 
 
 @app.route("/")
@@ -57,6 +58,15 @@ def search(req: Request, q: Input) -> Response:
         status_code=20,
         meta="text/gemini",
         body=q.get_value(),
+    )
+
+
+@example_dot_com_router.route("/test")
+def example_dot_com__test(req: Request) -> Response:
+    return Response(
+        status_code=20,
+        meta="text/gemini",
+        body="example.com test",
     )
 
 

@@ -13,14 +13,20 @@ from gemapi.router import Router
 
 class Application:
     def __init__(self) -> None:
-        self.router = Router()
+        self._default_router = Router()
+        self._hostnames: dict[str, Router] = {}
 
     def route(self, path: str):
-        def _decorator(handler):
-            self.router.register_route(path, handler)
-            return handler
+        return self._default_router.route(path)
 
-        return _decorator
+    def router_for_hostname(self, hostname: str) -> Router:
+        if hostname not in self._hostnames:
+            router = Router()
+            self._hostnames[hostname] = router
+        else:
+            router = self._hostnames[hostname]
+
+        return router
 
     async def stream_handler(
         self,
@@ -52,7 +58,12 @@ class Application:
             raise ValueError("Not a gemini URL")
 
         req = Request(parsed_url=parsed_url)
-        matched_route, matched_params = self.router.match(req.parsed_url.path)
+        if req.parsed_url.netloc in self._hostnames:
+            router = self._hostnames[req.parsed_url.netloc]
+        else:
+            router = self._default_router
+
+        matched_route, matched_params = router.match(req.parsed_url.path)
         if not matched_route:
             resp = NotFoundResponse()
         else:

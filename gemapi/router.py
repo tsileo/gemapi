@@ -94,10 +94,13 @@ class Router:
     def __init__(self) -> None:
         self._routes: list[Route] = []
 
-    def register_route(self, path: str, handler: Callable[..., Any]) -> Route:
-        route = Route.from_path(path, handler)
-        self._routes.append(route)
-        return route
+    def route(self, path: str) -> Callable[..., Any]:
+        def _decorator(handler: Callable[..., Any]) -> Callable[..., Any]:
+            route = Route.from_path(path, handler)
+            self._routes.append(route)
+            return handler
+
+        return _decorator
 
     def match(self, path: str) -> tuple[Route | None, dict[str, str] | None]:
         for route in self._routes:
