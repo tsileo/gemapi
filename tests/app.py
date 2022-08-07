@@ -1,34 +1,34 @@
 from gemapi.applications import Application
 from gemapi.applications import Input
-from gemapi.applications import RawResponse
 from gemapi.applications import Request
+from gemapi.applications import Response
 
 app = Application()
 
 
 @app.route("/")
-async def index(req: Request) -> RawResponse:
-    return RawResponse(
+async def index(req: Request) -> Response:
+    return Response(
         status_code=20,
         meta="text/gemini",
-        content="toto",
+        body="toto",
     )
 
 
 @app.route("/hello/{name:str}")
-async def hello(req: Request, name: str) -> RawResponse:
-    return RawResponse(
+async def hello(req: Request, name: str) -> Response:
+    return Response(
         status_code=20,
         meta="text/gemini",
-        content=f"Hello {name}",
+        body=f"Hello {name}",
     )
 
 
 @app.route("/search")
-def search(req: Request, q: Input) -> RawResponse:
+def search(req: Request, q: Input) -> Response:
     # Also support non coroutine functions
-    return RawResponse(
+    return Response(
         status_code=20,
         meta="text/gemini",
-        content=q.get_value(),
+        body=q.get_value(),
     )

@@ -6,14 +6,9 @@ from loguru import logger
 
 from gemapi.request import Input
 from gemapi.request import Request
+from gemapi.responses import InputResponse
+from gemapi.responses import NotFoundResponse
 from gemapi.router import Router
-
-
-class RawResponse:
-    def __init__(self, status_code: int, meta: str, content: str | None) -> None:
-        self.status_code = status_code
-        self.meta = meta
-        self.content = content
 
 
 class Application:
@@ -59,7 +54,7 @@ class Application:
         req = Request(parsed_url=parsed_url)
         matched_route, matched_params = self.router.match(req.parsed_url.path)
         if not matched_route:
-            resp = RawResponse(status_code=51, meta="Not found", content=None)
+            resp = NotFoundResponse()
         else:
             if matched_params is None:
                 raise ValueError("Missing matched params")
@@ -67,10 +62,8 @@ class Application:
             handler_params: dict[str, Any] = {}
             handler_params.update(matched_params)
             if matched_route.input_parameter and not parsed_url.query:
-                resp = RawResponse(
-                    status_code=10,
-                    meta=matched_route.input_parameter.name,
-                    content=None,
+                resp = InputResponse(
+                    matched_route.input_parameter.name,
                 )
             else:
                 if matched_route.input_parameter:
@@ -83,11 +76,7 @@ class Application:
                 else:
                     resp = matched_route.handler(req, **handler_params)
 
-        data = f"{resp.status_code} {resp.meta}\r\n".encode("utf-8")
-        writer.write(data)
-        if resp.content:
-            writer.write(resp.content.encode())
-
+        writer.write(resp.as_bytes())
         await writer.drain()
 
         logger.info("Close the connection")
