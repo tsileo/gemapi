@@ -94,7 +94,6 @@ class CertificateManager:
 
         logger.info("Generating certificate")
 
-        one_day = datetime.timedelta(days=1)
         builder = x509.CertificateBuilder()
         builder = builder.subject_name(
             x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, self._hostnames[0])])
@@ -102,8 +101,12 @@ class CertificateManager:
         builder = builder.issuer_name(
             x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, self._hostnames[0])])
         )
-        builder = builder.not_valid_before(datetime.datetime.today() - one_day)
-        builder = builder.not_valid_after(datetime.datetime.today() + (one_day * 365))
+        builder = builder.not_valid_before(
+            datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=1)
+        )
+        builder = builder.not_valid_after(
+            datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(days=365)
+        )
         builder = builder.serial_number(x509.random_serial_number())
         builder = builder.public_key(private_key.public_key())
         builder = builder.add_extension(

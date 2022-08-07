@@ -1,4 +1,5 @@
 import asyncio
+import datetime
 import signal
 import ssl
 
@@ -33,8 +34,13 @@ class Server:
                 logger.info("Certificate is expiring, restarting server")
                 stop.set()
 
-            timer = loop.call_at(
-                cm.certificate_expires_at().timestamp(),
+            expires_in = (
+                cm.certificate_expires_at().timestamp()
+                - datetime.datetime.now(datetime.timezone.utc).timestamp()
+            )
+            logger.info(f"Certificate is expiring in {expires_in}")
+            timer = loop.call_later(
+                expires_in,
                 restart_server,
             )
 
