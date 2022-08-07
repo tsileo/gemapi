@@ -1,7 +1,6 @@
 import asyncio
 import inspect
 import re
-import signal
 import ssl
 from dataclasses import dataclass
 from enum import Enum
@@ -142,7 +141,7 @@ class Application:
         ssl_ctx.load_cert_chain("cert.pem", keyfile="key.pem")
         return ssl_ctx
 
-    async def _stream_handler(
+    async def stream_handler(
         self,
         reader: asyncio.StreamReader,
         writer: asyncio.StreamWriter,
@@ -208,50 +207,3 @@ class Application:
         writer.close()
 
         return
-
-    async def run(self, host: str = "localhost", port: int = 1965):
-        loop = asyncio.get_event_loop()
-        signals = (signal.SIGHUP, signal.SIGTERM, signal.SIGINT)
-        for s in signals:
-            loop.add_signal_handler(
-                s, lambda s=s: asyncio.create_task(shutdown(s, loop))
-            )
-        while True:
-            server = await asyncio.start_server(
-                self._stream_handler, host, port, ssl=self._get_ssl_ctx()
-            )
-            addrs = ", ".join(str(sock.getsockname()) for sock in server.sockets)
-            logger.info(f"Serving on {addrs}")
-            stop = asyncio.Event()
-
-            def restart_server():
-                # TODO:
-                stop.set()
-
-            timer = loop.call_later(3, restart_server)
-            # asyncio.create_task(restart_server())
-
-            try:
-                await stop.wait()
-            except asyncio.exceptions.CancelledError:
-                logger.info("stop cancelled")
-                break
-            server.close()
-            timer.cancel()
-        # async with server:
-        #    await server.serve_forever()
-        logger.info("Exiting")
-
-
-async def shutdown(signal, loop):
-    """Cleanup tasks tied to the service's shutdown."""
-    logger.info(f"{signal=}")
-    tasks = [t for t in asyncio.all_tasks() if t is not asyncio.current_task()]
-
-    logger.info(f"Cancelling {len(tasks)} tasks")
-
-    [task.cancel() for task in tasks]
-
-    await asyncio.gather(*tasks)
-    logger.info("stopping loop")
-    loop.stop()

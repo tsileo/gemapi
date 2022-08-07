@@ -13,8 +13,9 @@
    - as in it requires Python 3.10+
    - relies on type annotations (similar to FastAPI)
    - built on top of `asyncio` streams
- - Handle certificate generation
+ - Handle certificate generation and renewal
    - TLS 1.3 only with Ed25519 public key algorithm
+   - Certificate is renewed automatically on expiration
 
 
 ## Getting started
@@ -26,6 +27,7 @@ from gemapi.applications import Application
 from gemapi.applications import Input
 from gemapi.applications import RawResponse
 from gemapi.applications import Request
+from gemapi.server import Server
 
 app = Application()
 
@@ -58,7 +60,7 @@ def search(req: Request, q: Input) -> RawResponse:
     )
 
 
-asyncio.run(app.run())
+asyncio.run(Server(app).run())
 ```
 
 

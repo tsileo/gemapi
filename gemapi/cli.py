@@ -4,6 +4,7 @@ import importlib
 import click
 
 from gemapi.applications import Application
+from gemapi.server import Server
 
 
 @click.group()
@@ -19,7 +20,7 @@ def run(app: str) -> None:
     if not isinstance(application, Application):
         raise ValueError(f"{app} is not a valid app")
 
-    asyncio.run(application.run())
+    asyncio.run(Server(application).run())
 
 
 main.add_command(run)

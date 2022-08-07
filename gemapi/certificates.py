@@ -85,8 +85,9 @@ class CertificateManager:
                 serialization.NoEncryption(),
             )
             self.keyfile.write_bytes(private_bytes)
+            return private_key
         else:
-            return load_pem_private_key(self.keyfile.read_bytes(), None)
+            return load_pem_private_key(self.keyfile.read_bytes(), None)  # type: ignore
 
     def _generate_certificate(self) -> None:
         private_key = self._generate_private_key()
