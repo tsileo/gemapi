@@ -8,6 +8,7 @@ from gemapi.request import Input
 from gemapi.request import Request
 from gemapi.responses import InputResponse
 from gemapi.responses import NotFoundResponse
+from gemapi.responses import Response
 from gemapi.router import Router
 
 
@@ -63,6 +64,7 @@ class Application:
         else:
             router = self._default_router
 
+        resp: Response
         matched_route, matched_params = router.match(req.parsed_url.path)
         if not matched_route:
             resp = NotFoundResponse()
