@@ -7,10 +7,13 @@ from loguru import logger
 from gemapi.request import Input
 from gemapi.request import Request
 from gemapi.request import SensitiveInput
+from gemapi.responses import BadRequestResponse
 from gemapi.responses import InputResponse
 from gemapi.responses import NotFoundResponse
 from gemapi.responses import Response
 from gemapi.responses import SensitiveInputResponse
+from gemapi.responses import StatusError
+from gemapi.responses import TemporaryFailureResponse
 from gemapi.router import Router
 
 
@@ -36,33 +39,65 @@ class Application:
         reader: asyncio.StreamReader,
         writer: asyncio.StreamWriter,
     ) -> None:
-        data = await reader.read(1024)
-        logger.info(data)
-
         client_host, client_port, *_ = writer.get_extra_info("peername")
+        resp: Response
 
-        # Ensure it's a valid request
-        # 'gemini://localhost/\r\n'
-        # 1. ending with a <CR><LF>
-        if not data.endswith(b"\r\n"):
-            raise ValueError("Not ending with a CRLF")
+        try:
+            data = await reader.read(1026)
 
-        message = data.decode()
-        parsed_url = urlparse(message[:-2])
-        logger.info(f"{parsed_url}")
+            # Ensure it's a valid request
+            # 'gemini://localhost/\r\n'
+            # 1. ending with a <CR><LF>
+            if not data.endswith(b"\r\n"):
+                raise ValueError("Not ending with a CRLF")
 
-        if parsed_url.scheme != "gemini":
-            raise ValueError("Not a gemini URL")
+            message = data.decode()
 
-        if parsed_url.path == "":
-            parsed_url = parsed_url._replace(path="/")
+            parsed_url = urlparse(message[:-2])
 
-        req = Request(
-            parsed_url=parsed_url,
-            client_host=client_host,
-            client_port=client_port,
-        )
+            if parsed_url.scheme != "gemini":
+                raise ValueError("Not a gemini URL")
 
+            if parsed_url.path == "":
+                parsed_url = parsed_url._replace(path="/")
+
+            if "." in parsed_url.path:
+                raise ValueError("dots in path are not allowed")
+
+        except Exception:
+            logger.exception(f"{client_host}:{client_port} - 51")
+            resp = BadRequestResponse("Bad request")
+
+        else:
+            req = Request(
+                parsed_url=parsed_url,
+                client_host=client_host,
+                client_port=client_port,
+            )
+
+            try:
+                resp = await self._process_request(req)
+            except StatusError as status_error:
+                resp = status_error.as_response()
+            except Exception:
+                logger.exception(f"{client_host}:{client_port} - 40")
+                resp = TemporaryFailureResponse("Failed to process request")
+
+            logger.info(
+                f"{client_host}:{client_port} - "
+                f"{req.parsed_url.geturl()} {resp.status_code}"
+            )
+
+        writer.write(resp.as_bytes())
+        await writer.drain()
+        writer.close()
+
+        return
+
+    async def _process_request(
+        self,
+        req: Request,
+    ) -> Response:
         # Check if there's router registered for the hostname
         if req.parsed_url.netloc in self._hostnames:
             router = self._hostnames[req.parsed_url.netloc]
@@ -70,8 +105,11 @@ class Application:
             # Or use the default router
             router = self._default_router
 
+        # Select the router
         resp: Response
         matched_route, matched_params = router.match(req.parsed_url.path)
+
+        # Build the response
         if not matched_route:
             resp = NotFoundResponse()
         else:
@@ -80,7 +118,7 @@ class Application:
 
             handler_params: dict[str, Any] = {}
             handler_params.update(matched_params)
-            if matched_route.input_parameter and not parsed_url.query:
+            if matched_route.input_parameter and not req.parsed_url.query:
                 if matched_route.input_parameter.annotation is Input:
                     resp = InputResponse(
                         matched_route.input_parameter.name,
@@ -97,7 +135,7 @@ class Application:
             else:
                 if matched_route.input_parameter:
                     handler_params[matched_route.input_parameter.name] = Input(
-                        parsed_url.query
+                        req.parsed_url.query
                     )
                 # TODO: pass the path params wit the right type as kwargs
                 if matched_route.handler_is_coroutine:
@@ -105,9 +143,4 @@ class Application:
                 else:
                     resp = matched_route.handler(req, **handler_params)
 
-        writer.write(resp.as_bytes())
-        await writer.drain()
-
-        writer.close()
-
-        return
+        return resp

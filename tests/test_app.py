@@ -54,6 +54,13 @@ def test_app__hello(test_application):
     assert response.data() == "Hello thomas"
 
 
+def test_app__hello__not_found_error(test_application):
+    response = ignition.request("//localhost/hello/not-found")
+
+    assert response.status == "51"
+    assert response.data() == "51 nope"
+
+
 def test_app__input(test_application):
     response = ignition.request("//localhost/search")
 

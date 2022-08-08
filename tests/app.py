@@ -1,6 +1,7 @@
 from gemapi.applications import Application
 from gemapi.applications import Input
 from gemapi.applications import Request
+from gemapi.responses import NotFoundError
 from gemapi.responses import Response
 from gemapi.responses import StatusCode
 
@@ -20,6 +21,9 @@ async def index(req: Request) -> Response:
 
 @app.route("/hello/{name:str}")
 async def hello(req: Request, name: str) -> Response:
+    if name == "not-found":
+        raise NotFoundError("nope")
+
     return Response(
         status_code=StatusCode.SUCCESS,
         meta="text/gemini",

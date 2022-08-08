@@ -1,4 +1,5 @@
 from enum import IntEnum
+from typing import ClassVar
 
 
 class StatusCode(IntEnum):
@@ -51,6 +52,21 @@ class Response:
         return data.encode("utf-8")
 
 
+class StatusError(Exception):
+
+    STATUS_CODE: ClassVar[StatusCode]
+
+    def __init__(self, meta: str) -> None:
+        self.meta = meta
+
+    def as_response(self) -> Response:
+        return Response(self.STATUS_CODE, self.meta)
+
+
+class NotFoundError(StatusError):
+    STATUS_CODE = StatusCode.NOT_FOUND
+
+
 class NotFoundResponse(Response):
     def __init__(self, meta: str = "Not found") -> None:
         super().__init__(StatusCode.NOT_FOUND, meta)
@@ -69,3 +85,8 @@ class SensitiveInputResponse(Response):
 class BadRequestResponse(Response):
     def __init__(self, meta: str) -> None:
         super().__init__(StatusCode.BAD_REQUEST, meta)
+
+
+class TemporaryFailureResponse(Response):
+    def __init__(self, meta: str) -> None:
+        super().__init__(StatusCode.TEMPORARY_FAILURE, meta)
