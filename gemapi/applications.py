@@ -39,7 +39,7 @@ class Application:
         data = await reader.read(1024)
         logger.info(data)
 
-        client_host, client_port = writer.get_extra_info("peername")
+        client_host, client_port, *_ = writer.get_extra_info("peername")
 
         # Ensure it's a valid request
         # 'gemini://localhost/\r\n'
