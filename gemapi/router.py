@@ -6,6 +6,7 @@ from typing import Any
 from typing import Callable
 
 from gemapi.request import Input
+from gemapi.request import SensitiveInput
 
 _PARAM_REGEX = re.compile("{([a-zA-Z_][a-zA-Z0-9_]*)(:[a-zA-Z_][a-zA-Z0-9_]*)?}")
 
@@ -39,19 +40,23 @@ class Route:
         path_regex, path_params = _build_path_regex(path)
         func_sig = inspect.signature(handler)
         maybe_input_param: inspect.Parameter | None = None
+
         for path_param in path_params:
             if path_param.name not in func_sig.parameters:
                 raise ValueError(
                     f"{handler.__name__} is missing a {path_param.name} " "parameter"
                 )
+
         for param in func_sig.parameters.values():
-            if param.annotation is Input:
+            if param.annotation is Input or param.annotation is SensitiveInput:
                 if maybe_input_param is None:
                     maybe_input_param = param
                 else:
                     raise ValueError(
-                        f"{handler.__name__}: Only 1 Input parameter is allowed"
+                        f"{handler.__name__}: Only 1 Input/SensitiveInput "
+                        "parameter is allowed"
                     )
+
         return cls(
             path_regex=path_regex,
             path_params=path_params,

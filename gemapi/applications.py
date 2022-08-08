@@ -6,9 +6,11 @@ from loguru import logger
 
 from gemapi.request import Input
 from gemapi.request import Request
+from gemapi.request import SensitiveInput
 from gemapi.responses import InputResponse
 from gemapi.responses import NotFoundResponse
 from gemapi.responses import Response
+from gemapi.responses import SensitiveInputResponse
 from gemapi.router import Router
 
 
@@ -37,13 +39,7 @@ class Application:
         data = await reader.read(1024)
         logger.info(data)
 
-        peername = writer.get_extra_info("peername")
-        logger.info(f"{peername=}")
-
-        ssl_obj = writer.get_extra_info("ssl_object")
-        logger.info(f"{ssl_obj=}")
-
-        logger.info(f"{ssl_obj.server_hostname=}")
+        client_host, client_port = writer.get_extra_info("peername")
 
         # Ensure it's a valid request
         # 'gemini://localhost/\r\n'
@@ -58,10 +54,20 @@ class Application:
         if parsed_url.scheme != "gemini":
             raise ValueError("Not a gemini URL")
 
-        req = Request(parsed_url=parsed_url)
+        if parsed_url.path == "":
+            parsed_url = parsed_url._replace(path="/")
+
+        req = Request(
+            parsed_url=parsed_url,
+            client_host=client_host,
+            client_port=client_port,
+        )
+
+        # Check if there's router registered for the hostname
         if req.parsed_url.netloc in self._hostnames:
             router = self._hostnames[req.parsed_url.netloc]
         else:
+            # Or use the default router
             router = self._default_router
 
         resp: Response
@@ -75,9 +81,19 @@ class Application:
             handler_params: dict[str, Any] = {}
             handler_params.update(matched_params)
             if matched_route.input_parameter and not parsed_url.query:
-                resp = InputResponse(
-                    matched_route.input_parameter.name,
-                )
+                if matched_route.input_parameter.annotation is Input:
+                    resp = InputResponse(
+                        matched_route.input_parameter.name,
+                    )
+                elif matched_route.input_parameter.annotation is SensitiveInput:
+                    resp = SensitiveInputResponse(
+                        matched_route.input_parameter.name,
+                    )
+                else:
+                    raise ValueError(
+                        "Unexpected input param type "
+                        f"{matched_route.input_parameter.annotation}"
+                    )
             else:
                 if matched_route.input_parameter:
                     handler_params[matched_route.input_parameter.name] = Input(
@@ -92,7 +108,6 @@ class Application:
         writer.write(resp.as_bytes())
         await writer.drain()
 
-        logger.info("Close the connection")
         writer.close()
 
         return
