@@ -49,13 +49,6 @@ async def hello(req: Request, name: str) -> Response:
         raise NotFoundError("nope")
 
     return Response(
-        status_code=StatusCode.SUCCESS,
-        meta="text/gemini",
-        body=f"Hello {name}",
-    )
-
-
-    return Response(
         status_code=20,
         meta="text/gemini",
         body=f"Hello {name}",
