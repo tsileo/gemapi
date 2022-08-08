@@ -7,9 +7,10 @@ from loguru import logger
 from gemapi.request import Input
 from gemapi.request import Request
 from gemapi.request import SensitiveInput
+from gemapi.responses import BadRequestError
 from gemapi.responses import BadRequestResponse
 from gemapi.responses import InputResponse
-from gemapi.responses import NotFoundResponse
+from gemapi.responses import NotFoundError
 from gemapi.responses import Response
 from gemapi.responses import SensitiveInputResponse
 from gemapi.responses import StatusError
@@ -49,21 +50,24 @@ class Application:
             # 'gemini://localhost/\r\n'
             # 1. ending with a <CR><LF>
             if not data.endswith(b"\r\n"):
-                raise ValueError("Not ending with a CRLF")
+                raise BadRequestError("Not ending with a CRLF")
 
             message = data.decode()
 
             parsed_url = urlparse(message[:-2])
 
             if parsed_url.scheme != "gemini":
-                raise ValueError("Not a gemini URL")
+                raise BadRequestError(f"Invalid scheme {parsed_url.scheme}")
 
             if parsed_url.path == "":
                 parsed_url = parsed_url._replace(path="/")
 
             if "." in parsed_url.path:
-                raise ValueError("dots in path are not allowed")
+                raise BadRequestError("dots in path are not allowed")
 
+        except StatusError as status_error:
+            logger.error(f"{client_host}:{client_port} - {status_error.data()}")
+            resp = status_error.as_response()
         except Exception:
             logger.exception(f"{client_host}:{client_port} - 51")
             resp = BadRequestResponse("Bad request")
@@ -78,15 +82,24 @@ class Application:
             try:
                 resp = await self._process_request(req)
             except StatusError as status_error:
+                logger.error(
+                    f"{client_host}:{client_port} - {req.parsed_url.geturl()} "
+                    f"{status_error.data()}"
+                )
                 resp = status_error.as_response()
             except Exception:
-                logger.exception(f"{client_host}:{client_port} - 40")
                 resp = TemporaryFailureResponse("Failed to process request")
-
-            logger.info(
-                f"{client_host}:{client_port} - "
-                f"{req.parsed_url.geturl()} {resp.status_code}"
-            )
+                logger.exception(
+                    f"{client_host}:{client_port} - "
+                    f"{req.parsed_url.geturl()} {resp.status_code.name} "
+                    f"{resp.status_code.value} {resp.meta}"
+                )
+            else:
+                logger.info(
+                    f"{client_host}:{client_port} - "
+                    f"{req.parsed_url.geturl()} {resp.status_code.name} "
+                    f"{resp.status_code.value} {resp.meta}"
+                )
 
         writer.write(resp.as_bytes())
         await writer.drain()
@@ -111,36 +124,36 @@ class Application:
 
         # Build the response
         if not matched_route:
-            resp = NotFoundResponse()
-        else:
-            if matched_params is None:
-                raise ValueError("Missing matched params")
+            raise NotFoundError("Not found")
 
-            handler_params: dict[str, Any] = {}
-            handler_params.update(matched_params)
-            if matched_route.input_parameter and not req.parsed_url.query:
-                if matched_route.input_parameter.annotation is Input:
-                    resp = InputResponse(
-                        matched_route.input_parameter.name,
-                    )
-                elif matched_route.input_parameter.annotation is SensitiveInput:
-                    resp = SensitiveInputResponse(
-                        matched_route.input_parameter.name,
-                    )
-                else:
-                    raise ValueError(
-                        "Unexpected input param type "
-                        f"{matched_route.input_parameter.annotation}"
-                    )
+        if matched_params is None:
+            raise ValueError("Missing matched params")
+
+        handler_params: dict[str, Any] = {}
+        handler_params.update(matched_params)
+        if matched_route.input_parameter and not req.parsed_url.query:
+            if matched_route.input_parameter.annotation is Input:
+                resp = InputResponse(
+                    matched_route.input_parameter.name,
+                )
+            elif matched_route.input_parameter.annotation is SensitiveInput:
+                resp = SensitiveInputResponse(
+                    matched_route.input_parameter.name,
+                )
             else:
-                if matched_route.input_parameter:
-                    handler_params[matched_route.input_parameter.name] = Input(
-                        req.parsed_url.query
-                    )
-                # TODO: pass the path params wit the right type as kwargs
-                if matched_route.handler_is_coroutine:
-                    resp = await matched_route.handler(req, **handler_params)
-                else:
-                    resp = matched_route.handler(req, **handler_params)
+                raise ValueError(
+                    "Unexpected input param type "
+                    f"{matched_route.input_parameter.annotation}"
+                )
+        else:
+            if matched_route.input_parameter:
+                handler_params[matched_route.input_parameter.name] = Input(
+                    req.parsed_url.query
+                )
+            # TODO: pass the path params wit the right type as kwargs
+            if matched_route.handler_is_coroutine:
+                resp = await matched_route.handler(req, **handler_params)
+            else:
+                resp = matched_route.handler(req, **handler_params)
 
         return resp

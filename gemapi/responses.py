@@ -35,17 +35,16 @@ class Response:
         meta: str,
         body: str | None = None,
     ) -> None:
-        self.status_code = status_code
+        self.status_code = (
+            status_code
+            if isinstance(status_code, StatusCode)
+            else StatusCode(status_code)
+        )
         self.meta = meta
         self.body = body
 
     def as_bytes(self) -> bytes:
-        status_code = (
-            self.status_code.value
-            if isinstance(self.status_code, StatusCode)
-            else self.status_code
-        )
-        data = f"{status_code} {self.meta}\r\n"
+        data = f"{self.status_code.value} {self.meta}\r\n"
         if self.body:
             data += self.body
 
@@ -62,9 +61,24 @@ class StatusError(Exception):
     def as_response(self) -> Response:
         return Response(self.STATUS_CODE, self.meta)
 
+    def data(self) -> str:
+        return f"{self.STATUS_CODE.name}: {self.STATUS_CODE.value} {self.meta}"
+
 
 class NotFoundError(StatusError):
     STATUS_CODE = StatusCode.NOT_FOUND
+
+
+class GoneError(StatusError):
+    STATUS_CODE = StatusCode.GONE
+
+
+class BadRequestError(StatusError):
+    STATUS_CODE = StatusCode.BAD_REQUEST
+
+
+class TemporaryFailureError(StatusError):
+    STATUS_CODE = StatusCode.TEMPORARY_FAILURE
 
 
 class NotFoundResponse(Response):
